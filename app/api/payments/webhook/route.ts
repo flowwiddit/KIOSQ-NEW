@@ -31,6 +31,10 @@ function isValidSignature(rawBody: string, signature: string | null) {
   }
 
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
+  if (signature.length !== expected.length) {
+    return false;
+  }
+
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 

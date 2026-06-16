@@ -10,8 +10,7 @@ import {
   TransactionStatus,
   TransactionType,
   UserRole,
-  type ProductCategory,
-  type SeatType
+  ProductCategory
 } from "@prisma/client";
 import { addDays, differenceInMinutes } from "date-fns";
 import { revalidatePath } from "next/cache";
@@ -31,7 +30,7 @@ const profileSchema = z.object({
 
 const reservationSchema = z.object({
   seatId: z.string().min(1),
-  startsAt: z.string().datetime(),
+  startsAt: z.string().min(1),
   durationMinutes: z.coerce.number().int().min(30).max(360),
   note: z.string().max(500).optional()
 });
@@ -48,7 +47,7 @@ const productOrderSchema = z.object({
 const productSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z.string().min(2).max(120).regex(/^[a-z0-9-]+$/),
-  category: z.custom<ProductCategory>(),
+  category: z.nativeEnum(ProductCategory),
   description: z.string().min(2).max(500),
   priceKrw: z.coerce.number().int().min(0),
   stock: z.coerce.number().int().min(0),
@@ -136,7 +135,7 @@ export async function createReservation(formData: FormData) {
         orderId,
         amountKrw,
         description: `${seat.name} reservation`,
-        metadata: { seatId: seat.id, startsAt, endsAt }
+        metadata: { seatId: seat.id, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() }
       }
     });
 
@@ -181,7 +180,7 @@ export async function createMembershipCheckout(formData: FormData) {
       metadata: {
         plan: data.plan,
         totalMinutes: details.totalMinutes,
-        expiresAt: details.expiresAt
+        expiresAt: details.expiresAt.toISOString()
       }
     }
   });

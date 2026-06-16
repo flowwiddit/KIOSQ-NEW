@@ -3,6 +3,9 @@ import { CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { prisma } from "@/lib/db";
+import { fulfillPaidTransaction } from "@/lib/payments";
+import { confirmTossPayment } from "@/lib/toss";
 
 export const dynamic = "force-dynamic";
 
@@ -12,19 +15,26 @@ export default async function PaymentSuccessPage({
   searchParams: Promise<{ paymentKey?: string; orderId?: string; amount?: string }>;
 }) {
   const params = await searchParams;
-  const shouldConfirm = params.paymentKey && params.orderId && params.amount;
+  const { paymentKey, orderId, amount } = params;
 
-  if (shouldConfirm) {
-    await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/payments/confirm`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        paymentKey: params.paymentKey,
-        orderId: params.orderId,
-        amount: Number(params.amount)
-      }),
-      cache: "no-store"
+  if (paymentKey && orderId && amount) {
+    const transaction = await prisma.transaction.findUnique({
+      where: { orderId }
     });
+
+    if (transaction && transaction.amountKrw === Number(amount)) {
+      const payment = await confirmTossPayment({
+        paymentKey,
+        orderId,
+        amount: Number(amount)
+      });
+
+      await fulfillPaidTransaction(orderId, {
+        paymentKey: payment.paymentKey,
+        method: payment.method,
+        receiptUrl: payment.receipt?.url
+      });
+    }
   }
 
   return (
