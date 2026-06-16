@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  STAFF
+  OWNER
+}
+
+enum SeatType {
+  OPEN_DESK
+  QUIET_ZONE
+  PREMIUM_DESK
+  FOCUS_BOOTH
+  MEETING_ROOM
+}
+
+enum SeatStatus {
+  AVAILABLE
+  RESERVED
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum MembershipPlan {
+  DAILY_PASS
+  WEEKLY_PASS
+  MONTHLY_MEMBERSHIP
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PassStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REFUNDED
+}
+
+enum CheckInStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum TransactionStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum TransactionType {
+  MEMBERSHIP
+  STUDY_PASS
+  PRODUCT_ORDER
+  RESERVATION
+}
+
+enum ProductCategory {
+  COFFEE
+  TEA
+  ENERGY_DRINK
+  SNACK
+  PRINTING
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  RESERVATION
+  PAYMENT
+  MEMBERSHIP
+  SYSTEM
+  PROMOTION
+}
+
+enum DeviceStatusState {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  MAINTENANCE
+}
+
+model User {
+  id               String         @id @default(cuid())
+  clerkId          String         @unique
+  email            String         @unique
+  name             String
+  phone            String?
+  imageUrl         String?
+  role             UserRole       @default(CUSTOMER)
+  kakaoProviderId  String?
+  naverProviderId  String?
+  memberships      Membership[]
+  studyPasses      StudyPass[]
+  reservations     Reservation[]
+  checkIns         CheckIn[]
+  transactions     Transaction[]
+  orders           Order[]
+  notifications    Notification[]
+  currentSeats     Seat[]         @relation("CurrentSeatUser")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        UserRole @unique
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Membership {
+  id                String           @id @default(cuid())
+  userId            String
+  plan              MembershipPlan
+  status            MembershipStatus @default(ACTIVE)
+  title             String
+  remainingMinutes  Int
+  totalMinutes      Int
+  startsAt          DateTime
+  expiresAt         DateTime
+  priceKrw          Int
+  transactionId     String?
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction       Transaction?     @relation(fields: [transactionId], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status, expiresAt])
+}
+
+model StudyPass {
+  id               String       @id @default(cuid())
+  userId           String
+  name             String
+  status           PassStatus   @default(ACTIVE)
+  remainingMinutes Int
+  totalMinutes     Int
+  expiresAt        DateTime
+  priceKrw         Int
+  transactionId    String?
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction      Transaction? @relation(fields: [transactionId], references: [id])
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([status, expiresAt])
+}
+
+model Seat {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  name           String
+  type           SeatType
+  status         SeatStatus    @default(AVAILABLE)
+  hourlyRateKrw  Int
+  floor          Int           @default(1)
+  zone           String
+  currentUserId  String?
+  currentUser    User?         @relation("CurrentSeatUser", fields: [currentUserId], references: [id])
+  reservations   Reservation[]
+  checkIns       CheckIn[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([type, status])
+  @@index([currentUserId])
+}
+
+model Reservation {
+  id               String            @id @default(cuid())
+  userId           String
+  seatId           String
+  status           ReservationStatus @default(PENDING)
+  startsAt         DateTime
+  endsAt           DateTime
+  durationMinutes  Int
+  note             String?
+  transactionId    String?
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seat             Seat              @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  transaction      Transaction?      @relation(fields: [transactionId], references: [id])
+  checkIns         CheckIn[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([seatId, startsAt, endsAt])
+  @@index([status, startsAt])
+}
+
+model CheckIn {
+  id             String        @id @default(cuid())
+  userId         String
+  seatId         String
+  reservationId  String?
+  status         CheckInStatus @default(ACTIVE)
+  checkedInAt    DateTime      @default(now())
+  checkedOutAt   DateTime?
+  minutesUsed    Int           @default(0)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seat           Seat          @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  reservation    Reservation?  @relation(fields: [reservationId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([seatId, status])
+}
+
+model Transaction {
+  id                 String            @id @default(cuid())
+  userId             String
+  type               TransactionType
+  status             TransactionStatus @default(PENDING)
+  orderId            String            @unique
+  tossPaymentKey     String?
+  amountKrw          Int
+  method             String?
+  receiptUrl         String?
+  description        String
+  metadata           Json?
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberships        Membership[]
+  studyPasses        StudyPass[]
+  reservations       Reservation[]
+  productOrder       Order?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  category    ProductCategory
+  description String
+  priceKrw    Int
+  imagePath   String?
+  isActive    Boolean         @default(true)
+  stock       Int             @default(0)
+  orderItems  OrderItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([category, isActive])
+}
+
+model Order {
+  id             String       @id @default(cuid())
+  userId         String
+  status         OrderStatus  @default(PENDING)
+  totalKrw       Int
+  transactionId  String?      @unique
+  pickupCode     String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+  items          OrderItem[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  priceKrw  Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  readAt    DateTime?
+  actionUrl String?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([type, createdAt])
+}
+
+model PricingRule {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  amountKrw   Int
+  description String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model DeviceStatus {
+  id          String            @id @default(cuid())
+  name        String
+  type        String
+  location    String
+  status      DeviceStatusState @default(ONLINE)
+  lastSeenAt  DateTime          @default(now())
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status])
+}
